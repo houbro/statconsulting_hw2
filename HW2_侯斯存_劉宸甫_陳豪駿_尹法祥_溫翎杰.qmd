@@ -1,0 +1,522 @@
+---
+title: "HW2"
+date: today
+author: "侯思存，劉宸甫，陳豪駿，尹法祥，溫翎杰"
+format:
+ pdf:
+    include-in-header:
+      - text: |
+         \usepackage{setspace,relsize}
+         \usepackage{geometry}
+         \geometry{verbose,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,rmargin=2.5cm}
+mainfont: "Microsoft JhengHei UI"
+toc: true
+lang: zh-Tw
+documentclass: article
+pdf-engine: xelatex
+execute:
+  tidy: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+library(showtext)
+showtext_auto()
+```
+
+## 讀取資料：知名度與支持度
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(haven)
+
+data <- read_sav("poll.sav")
+data_north<-data[which(data[,1]==1),]
+data_west<-data[which(data[,1]==2),]#先將資料分成北跟中西區
+data_north<-data_north[,-3]
+data_west<-data_west[,-2]
+
+north_multiple_answer<-data_north[,c(3:10)]
+west_multiple_answer<-data_west[,c(3:10)]
+multiple_answer<-data[,c(4:11)]
+sum(north_multiple_answer == 3)
+#列出候選人知名度
+# 創建候選人和區域的資料框
+candidate_ids <- 1:10
+regions <- c("北區", "中西區")  # 兩個區域
+age<-c(1:5)
+edu<-c(1:5)
+sex<-c(1:2)
+# 創建一個空的資料框，行是候選人，列是區域
+popularity <- data.frame(matrix(nrow = length(candidate_ids),
+                                ncol = length(regions)+length(age)+length(edu)+length(sex)))
+rownames(popularity) <- paste("candidate", candidate_ids, sep = "")
+colnames(popularity) <- c(regions,
+                          paste("age", age, sep = ""),
+                          paste("education", edu, sep = ""),
+                          paste("sex", sex, sep = ""))
+
+popularity[, "北區"] <- sapply(candidate_ids, 
+function(i) sum(north_multiple_answer == i))
+
+
+popularity[, "中西區"] <- sapply(candidate_ids,
+function(i) sum(west_multiple_answer == i))
+
+for (v in 1:5) {
+  col_name <- paste("age", v, sep = "")
+  popularity[, col_name] <- sapply(candidate_ids,
+function(i) sum((multiple_answer == i) & (data$v6 == v)))
+}
+
+for (e in 1:5) {
+  col_name <- paste("education", e, sep = "")
+  popularity[, col_name] <- sapply(candidate_ids, 
+function(i) sum((multiple_answer == i) & (data$v7 == e)))
+}
+
+for (s in 1:2) {
+  col_name <- paste("sex", s, sep = "")
+  popularity[, col_name] <- sapply(candidate_ids, 
+function(i) sum((multiple_answer == i) & (data$v8 == s)))
+}
+
+#將資料轉換為長格式與改寫變數
+library(reshape2)
+popularity$candidate<-paste("candidate",1:10,sep="")
+
+popularity <- popularity%>%
+  mutate(candidate=case_when(
+    candidate == "candidate1" ~ "1號候選人",
+    candidate == "candidate2" ~ "2號候選人",
+    candidate == "candidate3" ~ "3號候選人",
+    candidate == "candidate4" ~ "4號候選人",
+    candidate == "candidate5" ~ "5號候選人",
+    candidate == "candidate6" ~ "6號候選人",
+    candidate == "candidate7" ~ "7號候選人",
+    candidate == "candidate8" ~ "8號候選人",
+    candidate == "candidate9" ~ "9號候選人",
+    candidate == "candidate10" ~ "10號候選人",
+    TRUE ~ as.character(candidate)
+  ))
+
+popularity_long_region <- melt(popularity, 
+                               id.vars = "candidate", 
+                               measure.vars = c("北區", "中西區"),
+                               variable.name = "region", 
+                               value.name = "popularity")
+
+# 轉換 age 
+popularity_long_age <- melt(popularity, id.vars = "candidate", 
+                            measure.vars = paste("age", 1:5, sep = ""),
+                            variable.name = "age", 
+                            value.name = "popularity") 
+popularity_long_age <-popularity_long_age%>%
+  mutate(age = case_when(
+    age == "age1" ~ "20-29歲",
+    age == "age2" ~ "30-39歲",
+    age == "age3" ~ "40-49歲",
+    age == "age4" ~ "50-59歲",
+    age == "age5" ~ "60歲以上",
+    TRUE ~ as.character(age)
+  ))
+  
+
+# 轉換 education 
+popularity_long_education <- melt(popularity, 
+                                  id.vars = "candidate", 
+                                  measure.vars = paste("education", 1:5, sep = ""),
+                                  variable.name = "education", 
+                                  value.name = "popularity")
+popularity_long_education <-popularity_long_education%>%
+  mutate(education = case_when(
+    education == "education1" ~ "1:小學或以下",
+    education == "education2" ~ "2:初中、國中",
+    education == "education3" ~ "3:高中、高職",
+    education == "education4" ~ "4:專科",
+    education == "education5" ~ "5:大學以上",
+    TRUE ~ as.character(education)
+  ))
+
+# 轉換 sex 
+popularity_long_sex <- melt(popularity, 
+                            id.vars = "candidate", 
+                            measure.vars = paste("sex", 1:2, sep = ""),
+                            variable.name = "sex", 
+                            value.name = "popularity")
+popularity_long_sex <-popularity_long_sex%>%
+  mutate(sex = case_when(
+    sex == "sex1" ~ "1:男性",
+    sex == "sex2" ~ "2:女性",
+    TRUE ~ as.character(sex)
+  ))
+
+#可視化
+ggplot(popularity_long_region, 
+       aes(x = candidate, y = popularity, fill = region)) +
+       geom_bar(stat = "identity", position = "dodge") +
+       labs( x = "Candidate", y = "Popularity") +
+       theme_minimal()+
+       theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(popularity_long_age, 
+       aes(x = candidate, y = popularity, fill = age)) +
+   geom_bar(stat = "identity", position = "dodge") +
+   labs(x = "Candidate", y = "Popularity") +
+   theme_minimal()+
+   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(popularity_long_education,
+       aes(x = candidate, y = popularity, fill = education)) +
+   geom_bar(stat = "identity", position = "dodge") +
+   labs( x = "Candidate", y = "Popularity") +
+   theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(popularity_long_sex, 
+       aes(x = candidate, y = popularity, fill = sex)) +
+   geom_bar(stat = "identity", position = "dodge") +
+   labs( x = "Candidate", y = "Popularity") +
+   theme_minimal()+
+   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+#Support rating
+
+```{r}
+candidate_ids <- 1:10  
+regions <- c("北區", "中西區")  
+age<-c(1:6)
+edu<-c(1:5)
+sex<-c(1:2)
+# 創建一個空的資料框
+Support_rating <- data.frame(matrix(nrow = length(candidate_ids), 
+                                    ncol = length(regions)+length(age)+length(edu)+length(sex)))
+rownames(Support_rating) <- paste("candidate", candidate_ids, sep = "")
+colnames(Support_rating) <- c(regions,paste("age", age, sep = ""),
+                              paste("education", edu, sep = ""),
+                              paste("sex", sex, sep = ""))
+
+Support_rating[, "北區"] <- sapply(candidate_ids ,
+function(i) sum(data_north$v5 == i))
+
+
+Support_rating[, "中西區"] <- sapply(candidate_ids, 
+function(i) sum(data_west$v5 == i))
+
+for (v in 1:5) {
+  col_name <- paste("age", v, sep = "")
+  Support_rating[, col_name] <- sapply(candidate_ids, 
+function(i) sum((data$v5 == i) & (data$v6 == v)))
+}
+
+for (e in 1:5) {
+  col_name <- paste("education", e, sep = "")
+  Support_rating[, col_name] <- sapply(candidate_ids, 
+function(i) sum((data$v5 == i) & (data$v7 == e)))
+}
+
+for (s in 1:2) {
+  col_name <- paste("sex", s, sep = "")
+  Support_rating[, col_name] <- sapply(candidate_ids,
+function(i) sum((data$v5 == i) & (data$v8 == s)))
+}
+
+Support_rating$candidate<-paste("candidate",1:10,sep="")
+Support_rating <- Support_rating%>%
+ mutate(candidate=case_when(
+    candidate == "candidate1" ~ "1號候選人",
+    candidate == "candidate2" ~ "2號候選人",
+    candidate == "candidate3" ~ "3號候選人",
+    candidate == "candidate4" ~ "4號候選人",
+    candidate == "candidate5" ~ "5號候選人",
+    candidate == "candidate6" ~ "6號候選人",
+    candidate == "candidate7" ~ "7號候選人",
+    candidate == "candidate8" ~ "8號候選人",
+    candidate == "candidate9" ~ "9號候選人",
+    candidate == "candidate10" ~ "10號候選人",
+    TRUE ~ as.character(candidate)
+  ))
+
+#轉換為長格式
+Support_rating_long_region <- melt(Support_rating, id.vars = "candidate", 
+                               measure.vars = c("北區", "中西區"),
+                               variable.name = "region", 
+                               value.name = "Support_rating")
+
+
+Support_rating_long_age <- melt(Support_rating, id.vars = "candidate", 
+                            measure.vars = paste("age", 1:5, sep = ""),
+                            variable.name = "age", 
+                            value.name = "Support_rating")
+Support_rating_long_age<- Support_rating_long_age%>%
+  mutate(age = case_when(
+    age == "age1" ~ "20-29歲",
+    age == "age2" ~ "30-39歲",
+    age == "age3" ~ "40-49歲",
+    age == "age4" ~ "50-59歲",
+    age == "age5" ~ "60歲以上",
+    TRUE ~ as.character(age)
+  ))
+
+
+Support_rating_long_education <- melt(Support_rating, id.vars = "candidate", 
+                                  measure.vars = paste("education", 1:5, sep = ""),
+                                  variable.name = "education", 
+                                  value.name = "Support_rating")
+Support_rating_long_education <-Support_rating_long_education%>%
+  mutate(education = case_when(
+    education == "education1" ~ "1:小學或以下",
+    education == "education2" ~ "2:初中、國中",
+    education == "education3" ~ "3:高中、高職",
+    education == "education4" ~ "4:專科",
+    education == "education5" ~ "5:大學以上",
+    TRUE ~ as.character(education)
+  ))
+
+Support_rating_long_sex <- melt(Support_rating, id.vars = "candidate", 
+                            measure.vars = paste("sex", 1:2, sep = ""),
+                            variable.name = "sex", 
+                            value.name = "Support_rating")
+Support_rating_long_sex <- Support_rating_long_sex%>%
+  mutate(sex = case_when(
+    sex == "sex1" ~ "1:男性",
+    sex == "sex2" ~ "2:女性",
+    TRUE ~ as.character(sex)
+  ))
+
+ggplot(Support_rating_long_region, 
+       aes(x = candidate, y = Support_rating, fill = region)) +
+   geom_bar(stat = "identity", position = "dodge") +
+   labs( x = "Candidate", y = "Support_rating") +
+   theme_minimal()+
+   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(Support_rating_long_age, 
+       aes(x = candidate, y = Support_rating, fill = age)) +
+       geom_bar(stat = "identity", position = "dodge") +
+       labs( x = "Candidate", y = "Support_rating") +
+       theme_minimal()+
+       theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(Support_rating_long_education, 
+       aes(x = candidate, y = Support_rating, fill = education)) +
+       geom_bar(stat = "identity", position = "dodge") +
+       labs( x = "Candidate", y = "Support_rating") +
+       theme_minimal()+
+       theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(Support_rating_long_sex,
+       aes(x = candidate, y =Support_rating, fill = sex)) +
+       geom_bar(stat = "identity", position = "dodge") +
+       labs( x = "Candidate", y = "Support_rating") +
+       theme_minimal()+
+       theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+total_supporting<-data.frame(matrix(nrow = length(candidate_ids), ncol = 1))
+colnames(total_supporting)<-"Support_rating"
+total_supporting$candidate<-c("1號候選人",
+                             "2號候選人",
+                             "3號候選人",
+                             "4號候選人",
+                             "5號候選人",
+                             "6號候選人",
+                             "7號候選人",
+                             "8號候選人",
+                             "9號候選人",
+                             "10號候選人")
+total_supporting[, "Support_rating"] <- sapply(candidate_ids ,function(i) sum(data$v5 == i))
+
+ggplot(total_supporting, aes(x = candidate, y =Support_rating)) +
+   geom_bar(stat = "identity", position = "dodge") +
+   labs( x = "Candidate", y = "Support_rating") +
+   theme_minimal()+
+   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+依照地區知名度佔比圓餅圖
+
+```{r}
+library(dplyr)
+popularity_long_region <- popularity_long_region %>%
+  group_by(region) %>%
+  mutate(total_popularity = sum(popularity)) %>%
+  mutate(popularity_normalized = popularity / total_popularity) %>%
+  ungroup() %>%
+  mutate(percentage = round(popularity_normalized * 100, 1)) 
+
+ggplot(popularity_long_region, 
+       aes(x = factor(1), y = popularity_normalized, fill = candidate)) +
+       geom_bar(stat = "identity", width = 1) +
+       coord_polar("y") +
+       facet_wrap(~ region) +  
+       labs(title = "Candidate Popularity by Region (Normalized)", x = NULL, y = NULL) +
+       theme_void() +  
+       theme(legend.title = element_blank(),
+             legend.position = "right") + 
+  geom_text(aes(label = paste0(percentage, "%")), 
+            position = position_stack(vjust = 0.5)) 
+
+
+```
+
+依照年齡區間 知名度佔比圓餅圖
+
+```{r}
+
+library(dplyr)
+popularity_long_age <- popularity_long_age %>%
+  group_by(age) %>%
+  mutate(total_popularity = sum(popularity)) %>%
+  mutate(popularity_normalized = popularity / total_popularity) %>%
+  ungroup() %>%
+  mutate(percentage = round(popularity_normalized * 100, 1))  
+ggplot(popularity_long_age, 
+       aes(x = factor(1), y = popularity_normalized, fill = candidate)) +
+       geom_bar(stat = "identity", width = 1) +
+       coord_polar("y") +  
+       facet_wrap(~ age) +  
+       labs(title = "Candidate Popularity by Age Group (Normalized)", x = NULL, y = NULL) +
+       theme_void() + 
+       theme(legend.title = element_blank(),
+             legend.position = "right") +  
+       geom_text(aes(label = paste0(percentage, "%")), 
+            position = position_stack(vjust = 0.5))  
+
+```
+
+依照教育程度知名度佔比圓餅圖
+
+```{r}
+library(dplyr)
+popularity_long_education <- popularity_long_education %>%
+  group_by(education) %>%
+  mutate(total_popularity = sum(popularity)) %>%
+  mutate(popularity_normalized = popularity / total_popularity) %>%
+  ungroup() %>%
+  mutate(percentage = round(popularity_normalized * 100, 1))  
+
+ggplot(popularity_long_education, 
+       aes(x = factor(1), y = popularity_normalized, fill = candidate)) +
+       geom_bar(stat = "identity", width = 1) +
+       coord_polar("y") +  
+       facet_wrap(~ education) +  
+       labs(title = "Candidate Popularity by Education (Normalized)", x = NULL, y = NULL) +
+       theme_void() + 
+       theme(legend.title = element_blank(),
+             legend.position = "right") +
+       geom_text(aes(label = paste0(percentage, "%")), 
+       position = position_stack(vjust = 0.5))  
+
+```
+
+依照性別知名度佔比圓餅圖
+
+```{r}
+library(dplyr)
+popularity_long_sex <- popularity_long_sex %>%
+  group_by(sex) %>%
+  mutate(total_popularity = sum(popularity)) %>%
+  mutate(popularity_normalized = popularity / total_popularity) %>%
+  ungroup() %>%
+  mutate(percentage = round(popularity_normalized * 100, 1)) 
+
+ggplot(popularity_long_sex,
+       aes(x = factor(1), y = popularity_normalized, fill = candidate)) +
+       geom_bar(stat = "identity", width = 1) +
+       coord_polar("y") +  
+       facet_wrap(~ sex) +  
+       labs(title = "Candidate Popularity by Sex (Normalized)", x = NULL, y = NULL) +
+       theme_void() +  
+       theme(legend.title = element_blank(),  
+        legend.position = "right") +
+       geom_text(aes(label = paste0(percentage, "%")), 
+                 position = position_stack(vjust = 0.5))  
+
+
+```
+
+## 1、知名度與支持度分析
+
+1.  整體來看，不論是知名度或支持度，2,8,9號候選人都很沒有競爭力。
+
+    依照地區的知名度來看，北區最高是3號候選人，中西區最高是1號。\
+    而在中西區，3,4,7,10號候選人的知名度相差不大。
+
+2.  高齡大多知曉3號候選人，而年輕族群則較為熟識7號候選人。
+
+3.  教育水準較高的選民較多比例會選擇3號候選人，反之較低者會傾向選7號候選人。
+
+4.  支持度最高為3號候選人，其次為7號，但差異不大。
+
+## 2、三號候選人選舉策略
+
+### 觀察
+
+#### 知名度
+
+1.  3號候選人在中西區的知名度低於1,7號候選人
+
+2.  在年輕選民中（20-40間），3號候選人的知名度低於7號候選人，尤其是在20-30歲的區段。
+
+3.  3號候選人在各個教育程度的群眾中皆較為知名，但與7號候選人的差距在高教育程度的選民時減小。
+
+#### 支持度
+
+4.  教育水準較低的選民較傾向3號候選人，反之較高者會傾向選7號候選人。
+
+5.  整體而言，3號候選人的支持度略微高於7。
+
+### 結論
+
+認為3號候選人若想在市議員選舉中增加當選的勝算，策略上應該以7號候選人作為主要競爭對手。\
+除了穩住自己的基本盤（高齡、低教育程度）以外，應該也向年輕選民和高教育程度者多多表現自己，提升支持度。\
+且因為調查限制為20歲，忽略了選舉時剛獲得選舉權的首投族，以此調查的趨勢來看，7號候選人可能有潛藏的票倉，\
+需要注意。
+
+## 3、第3號候選人支持率的預測模式
+
+```{r}
+#模型建立：logistic
+dt<-data[,c("v1","v5","v6","v7","v8")]
+colnames(dt)<-c("region","support","age","education","sex")
+dt$region<-as.factor(dt$region)
+dt[,"support"]<-dt[,"support"]==3
+dt<-dt[-which(dt[,"age"]==6),]#刪除遺失值
+dt<-dt[-which(dt[,"education"]==95),]#刪除遺失值
+dt$age <- factor(dt$age)
+dt$education<-factor(dt$education)
+dt$sex<-as.factor(dt$sex)
+model1<-glm(dt$support~dt$region+dt$age+dt$education+dt$sex,
+            data=dt,
+            family = binomial(link = "logit"))
+summary(model1)
+
+#Step method
+model1.step <- step(model1,direction = c("both"))
+summary(model1.step)
+
+
+```
+
+## 模型觀察
+
+### Logistic : Step Method
+
+透過Step method，我們知道模型中education2,3,4與region2為顯著。\
+因模型預設以每個變數的１為基底，我們得到以下結論：
+
+-   region2(中西區)的係數約為-0.7481。\
+    代表選民來自中西區時，支持三號候選人的可能性約為北區選民的 $e^{-0.4781}=0.473$ 倍
+
+-   education2(初中、國中)的係數約為0.6172。\
+    代表選民最高學歷為初中或國中時，支持三號候選人的可能性約為最高學歷為小學或以下的 $e^{0.6172}=1.855$ 倍
+
+-   education3(高中、高職)的係數約為0.5075。\
+    代表選民最高學歷為高中或高職時，支持三號候選人的可能性約為最高學歷為小學或以下的 $e^{0.5075}=1.661$ 倍
+
+-   education4(專科)的係數約為0.6118。\
+    代表選民最高學歷為專科時，支持三號候選人的可能性約為最高學歷為小學或以下的 $e^{0.6118}=1.844$ 倍
